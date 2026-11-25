@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 버전 / 업데이트 ----------
 // 홈 화면에 설치한 앱에는 새로고침 버튼이 없으므로, 새 버전이 올라오면 앱 안에서 알려주고 바로 업데이트
-const APP_VERSION = '2026.11.25-3';
+const APP_VERSION = '2026.11.25-4';
 async function checkUpdate(manual) {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -546,5 +546,7 @@ document.getElementById('appVersion').textContent = APP_VERSION;
 document.getElementById('updateCheck').onclick = async () => { if (!(await checkUpdate(true))) {} };
 document.getElementById('hardReload').onclick = () => applyUpdate();
 checkUpdate(false);
+// 서비스 워커: 크롬 '앱 설치' 지원 + 항상 최신 파일 받기
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 // 다시 앱으로 돌아왔을 때(원격 화면이 아닐 때만) 확인
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !pc) checkUpdate(false); });
