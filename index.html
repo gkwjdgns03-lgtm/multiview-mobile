@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="멀티뷰">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-256.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<title>멀티뷰</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e7e9ee; --dim:#9aa1ad; --accent:#4f8cff; --ok:#3ecf8e; --warn:#f5a524; --bad:#f26b6b; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:16px/1.45 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; overscroll-behavior:none; }
+  .hidden { display:none !important; }
+  .screen { min-height:100%; padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); max-width:560px; margin:0 auto; }
+  header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  header img { width:34px; height:34px; }
+  header h1 { font-size:22px; margin:0; flex:1; }
+  button { font:inherit; color:#fff; background:var(--accent); border:0; border-radius:10px; padding:10px 16px; min-height:44px; cursor:pointer; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  button.danger { background:var(--bad); }
+  button:disabled { opacity:.5; }
+  input, select { width:100%; font:inherit; color:var(--text); background:#0b0d11; border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:6px; }
+  label { display:block; margin-top:14px; color:var(--dim); font-size:14px; }
+  .hint { color:var(--dim); font-size:13px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; }
+  .pc { display:flex; align-items:center; gap:12px; padding:14px; margin-bottom:10px; }
+  .pc .info { flex:1; min-width:0; }
+  .pc .name { font-size:17px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pc .sub { font-size:13px; color:var(--dim); }
+  .pc .more { background:transparent; color:var(--dim); padding:8px 10px; min-height:40px; }
+  .dot { width:12px; height:12px; border-radius:50%; flex:none; background:#555; }
+  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); } .dot.busy { background:var(--warn); } .dot.off { background:var(--bad); }
+  .st.on { color:var(--ok); } .st.busy { color:var(--warn); } .st.off { color:var(--bad); }
+  .empty { text-align:center; padding:40px 10px; color:var(--dim); }
+  .row { display:flex; gap:10px; margin-top:18px; }
+  .row > * { flex:1; }
+  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(24px + env(safe-area-inset-bottom)); max-width:92vw; background:var(--panel); border:1px solid var(--line); padding:12px 16px; border-radius:12px; z-index:50; font-size:14px; }
+  #busy { position:fixed; inset:0; background:rgba(15,17,21,.85); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; z-index:40; text-align:center; padding:20px; }
+  .spin { width:38px; height:38px; border:4px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:sp 0.8s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+
+  /* 원격 화면 */
+  #session { position:fixed; inset:0; background:#000; overflow:hidden; touch-action:none; }
+  #stage { position:absolute; inset:0; touch-action:none; }
+  #zoomer { position:absolute; left:0; top:0; width:100%; height:100%; transform-origin:0 0; }
+  #v { width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none; }
+  #bar { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:calc(8px + env(safe-area-inset-right)); display:flex; gap:6px; z-index:5; flex-wrap:wrap; justify-content:flex-end; max-width:calc(100% - 16px); }
+  #bar button { background:rgba(24,27,34,.82); border:1px solid rgba(255,255,255,.12); padding:6px 11px; min-height:38px; font-size:14px; border-radius:9px; }
+  #bar button.on { background:var(--accent); }
+  #bar.collapsed > :not(#barToggle) { display:none; }
+  #keys { position:fixed; left:0; right:0; bottom:0; z-index:6; display:flex; gap:5px; overflow-x:auto; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); background:rgba(15,17,21,.95); border-top:1px solid var(--line); }
+  #keys button { flex:none; padding:6px 11px; min-height:40px; font-size:14px; background:#232733; border-radius:8px; }
+  #keys button.on { background:var(--accent); }
+  #kb { position:fixed; left:0; bottom:0; width:1px; height:1px; opacity:0; border:0; padding:0; font-size:16px; }
+  #ripple { position:absolute; width:46px; height:46px; margin:-23px 0 0 -23px; border-radius:50%; border:3px solid var(--accent); pointer-events:none; z-index:4; opacity:0; transition:opacity .15s; }
+  #info { position:absolute; left:calc(8px + env(safe-area-inset-left)); bottom:calc(8px + env(safe-area-inset-bottom)); font-size:11px; color:rgba(255,255,255,.55); z-index:4; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<!-- 저장된 PC 목록 -->
+<div id="home" class="screen">
+  <header><img src="icon-256.png" alt=""><h1>멀티뷰</h1><button class="ghost" id="goSettings" aria-label="설정">⚙</button></header>
+  <div id="list"></div>
+  <button id="goAdd" style="width:100%;margin-top:6px">+ PC 추가</button>
+  <p class="hint" style="margin-top:18px">PC의 멀티뷰 첫 화면에 나오는 <b>ID</b>와 <b>비밀번호</b>로 추가하세요. 비밀번호는 이 기기에 그대로 저장되지 않고, 접속용 암호 키로만 보관돼요.</p>
+</div>
+
+<!-- PC 추가 -->
+<div id="add" class="screen hidden">
+  <header><button class="ghost" data-back>←</button><h1>PC 추가</h1></header>
+  <label>이름 (예: 창고 컴퓨터)<input id="addName" type="text" maxlength="30" autocomplete="off"></label>
+  <label>ID (9자리)<input id="addId" type="text" inputmode="numeric" autocomplete="off" placeholder="123 456 789"></label>
+  <label>비밀번호<input id="addPw" type="password" autocomplete="off"></label>
+  <div class="row"><button id="addSave">저장하고 접속</button></div>
+  <p class="hint" id="addMsg"></p>
+</div>
+
+<!-- 설정 -->
+<div id="settings" class="screen hidden">
+  <header><button class="ghost" data-back>←</button><h1>설정</h1></header>
+  <label>받는 화면 크기
+    <select id="setRes"><option value="1080">1080p (추천 · 데이터 절약)</option><option value="720">720p (데이터 가장 적게)</option><option value="1440">1440p</option><option value="native">원본 (가장 선명)</option></select>
+  </label>
+  <label>중계 서버 (TURN) — 회사망·통신사망에서 연결이 안 될 때<input id="setTurnUrl" type="text" placeholder="turn:relay1.expressturn.com:3478" autocomplete="off"></label>
+  <label>중계 아이디<input id="setTurnUser" type="text" autocomplete="off"></label>
+  <label>중계 비밀번호<input id="setTurnPass" type="password" autocomplete="off"></label>
+  <div class="row"><button class="ghost" id="turnTest">중계 서버 테스트</button></div>
+  <p class="hint" id="turnResult"></p>
+  <p class="hint">무료 중계 서버: expressturn.com 가입 → 대시보드의 서버 주소·Username·Password 입력 (월 1000GB 무료). 여기 입력하면 PC 쪽에도 자동으로 전달돼요.</p>
+</div>
+
+<!-- 원격 화면 -->
+<div id="session" class="hidden">
+  <div id="stage"><div id="zoomer"><video id="v" autoplay muted playsinline></video></div><div id="ripple"></div></div>
+  <div id="bar">
+    <button id="barToggle" aria-label="메뉴">≡</button>
+    <span id="monBtns" style="display:flex;gap:6px"></span>
+    <button id="kbBtn">⌨</button>
+    <button id="soundBtn">🔇</button>
+    <button id="zoomReset">1:1</button>
+    <button class="danger" id="endBtn">끊기</button>
+  </div>
+  <div id="keys" class="hidden">
+    <button data-k="Escape">Esc</button><button data-k="Tab">Tab</button>
+    <button data-mod="ControlLeft">Ctrl</button><button data-mod="AltLeft">Alt</button><button data-mod="ShiftLeft">Shift</button><button data-k="MetaLeft">⊞</button>
+    <button data-k="ArrowLeft">←</button><button data-k="ArrowUp">↑</button><button data-k="ArrowDown">↓</button><button data-k="ArrowRight">→</button>
+    <button data-k="Backspace">⌫</button><button data-k="Delete">Del</button><button data-k="Enter">⏎</button>
+    <button data-k="Lang1" data-key="HangulMode">한/영</button>
+    <button data-combo="ControlLeft+KeyC">복사</button><button data-combo="ControlLeft+KeyV">붙여넣기</button><button data-combo="ControlLeft+KeyZ">되돌리기</button>
+    <button data-k="F5">F5</button>
+  </div>
+  <div id="info"></div>
+  <textarea id="kb" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+  <audio id="a" autoplay playsinline></audio>
+</div>
+
+<div id="busy" class="hidden"><div class="spin"></div><div id="busyText">연결 중…</div><button class="ghost" id="busyCancel">취소</button></div>
+<div id="toast" class="hidden"></div>
+
+<script src="mqtt.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
