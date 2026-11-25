@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 버전 / 업데이트 ----------
 // 홈 화면에 설치한 앱에는 새로고침 버튼이 없으므로, 새 버전이 올라오면 앱 안에서 알려주고 바로 업데이트
-const APP_VERSION = '2026.11.25-5';
+const APP_VERSION = '2026.11.25-6';
 async function checkUpdate(manual) {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -135,7 +135,52 @@ async function watchSaved(ids) {
   if (watchClient.connected) { if (del.length) watchClient.unsubscribe(del); if (add.length) watchClient.subscribe(add, { qos: 1 }); }
   updateDots();
 }
-function statusOf(id) { if (!watchClient || !watchClient.connected) return ['', '확인 중']; return STATUS[pcStatus[id]] || ['off', '꺼짐']; }
+// 켜짐/꺼짐 신호(8884 포트)가 막힌 PC(회사망 등)는 일반 웹 포트(443)로 직접 물어봄
+// 화면이 보일 때만, PC마다 5분에 1번, 하루 최대 60번 (무료 중계 서버 사용량 보호)
+const pingInfo = {}, lastPingAt = {};
+let pingTopic = null, pingReady = null, savedIds = [];
+function pingBudgetOk() {
+  const day = new Date().toISOString().slice(0, 10);
+  let b; try { b = JSON.parse(localStorage.getItem('mv-ping') || '{}'); } catch { b = {}; }
+  if (b.day !== day) b = { day, n: 0 };
+  if (b.n >= 60) return false;
+  b.n++; try { localStorage.setItem('mv-ping', JSON.stringify(b)); } catch {}
+  return true;
+}
+function ensurePingTopic() {
+  if (pingReady) return pingReady;
+  pingTopic = 'rl' + randHex(15);
+  pingReady = new Promise((res) => {
+    let done = false;
+    subscribe(pingTopic, (raw) => {
+      let env; try { env = JSON.parse(raw); } catch { return; }
+      if (env.e === 'pong' && /^\d{9}$/.test(env.id || '')) { pingInfo[env.id] = { s: env.s === '2' ? '2' : '1', t: Date.now() }; updateDots(); }
+    }, (st) => { if (st === 'open' && !done) { done = true; res(true); } });
+    setTimeout(() => { if (!done) { done = true; res(false); } }, 10000);
+  });
+  return pingReady;
+}
+async function pingMissing() {
+  if (document.hidden || pc) return;
+  updateDots();
+  const now = Date.now();
+  const due = savedIds.filter((id) => !['1', '2'].includes(pcStatus[id]) && !(lastPingAt[id] && now - lastPingAt[id] < 5 * 60 * 1000));
+  if (!due.length || !(await ensurePingTopic())) return;
+  for (const id of due) {
+    if (!pingBudgetOk()) break;
+    lastPingAt[id] = Date.now();
+    publish(await topicFor(id), JSON.stringify({ p: 1, r: pingTopic })).catch(() => {});
+  }
+}
+setInterval(pingMissing, 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(pingMissing, 1500); });
+function statusOf(id) {
+  if (watchClient && watchClient.connected && ['1', '2'].includes(pcStatus[id])) return STATUS[pcStatus[id]];
+  const p = pingInfo[id];
+  if (p && Date.now() - p.t < 7 * 60 * 1000) return STATUS[p.s];
+  if (!watchClient || !watchClient.connected) return ['', '확인 중'];
+  return STATUS[pcStatus[id]] || ['off', '꺼짐'];
+}
 function updateDots() {
   for (const el of document.querySelectorAll('.pc[data-id]')) {
     const [cls, label] = statusOf(el.dataset.id);
@@ -170,7 +215,9 @@ async function renderList() {
     el.onclick = () => startSession(p);
     box.append(el);
   }
-  watchSaved(list.map((p) => p.id));
+  savedIds = list.map((p) => p.id);
+  watchSaved(savedIds);
+  setTimeout(pingMissing, 4000);
 }
 
 $('goAdd').onclick = () => { $('addName').value = ''; $('addId').value = ''; $('addPw').value = ''; $('addMsg').textContent = ''; show('add'); };
