@@ -286,6 +286,8 @@ async function enterSession() {
   statsTimer = setInterval(pollStats, 1000);
 }
 function endSession() {
+  orient = null; cssRot = false; session.style.cssText = '';
+  try { screen.orientation.unlock(); } catch {}
   clearTimeout(connectTimer); clearInterval(statsTimer); prevStats = null;
   if (ctl && ctl.readyState === 'open') try { ctl.send(JSON.stringify({ t: 'bye' })); } catch {}
   releaseMods();
@@ -343,9 +345,41 @@ function resetView() { view.s = 1; view.tx = 0; view.ty = 0; applyView(); }
 $('zoomReset').onclick = resetView;
 window.addEventListener('resize', applyView);
 
-// 화면 좌표 → PC 화면 비율 좌표 (0~1). 확대 상태와 레터박스 반영
+// ---------- 가로/세로 보기 ----------
+// 휴대폰이 지원하면 실제 화면 방향을 고정하고, 안 되면 원격 화면을 90도 돌려서 보여줌
+let orient = null, cssRot = false;
+const session = $('session');
+function physicalLandscape() { return window.innerWidth > window.innerHeight; }
+function applyRotation() {
+  cssRot = !!orient && (orient === 'landscape') !== physicalLandscape();
+  if (cssRot) {
+    session.style.width = window.innerHeight + 'px'; session.style.height = window.innerWidth + 'px';
+    session.style.right = 'auto'; session.style.bottom = 'auto';
+    session.style.transformOrigin = 'top left'; session.style.transform = 'rotate(90deg) translateY(-100%)';
+  } else { session.style.cssText = ''; }
+  const want = orient || (physicalLandscape() ? 'landscape' : 'portrait');
+  $('rotBtn').textContent = want === 'landscape' ? '↻ 세로' : '↻ 가로';
+  applyView();
+}
+async function setOrientation(mode) {
+  orient = mode;
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+    await screen.orientation.lock(mode);
+  } catch {} // 잠금이 안 되는 브라우저면 화면을 돌려서 보여줌
+  setTimeout(applyRotation, 300); applyRotation();
+}
+$('rotBtn').onclick = () => {
+  const cur = orient || (physicalLandscape() ? 'landscape' : 'portrait');
+  setOrientation(cur === 'landscape' ? 'portrait' : 'landscape');
+};
+window.addEventListener('resize', () => { if (orient) applyRotation(); });
+// 손가락 위치(화면 기준) → 원격 화면 영역 안 좌표 (90도 돌린 상태면 되돌려 계산)
+function toLocal(x, y) { return cssRot ? { x: y, y: window.innerWidth - x } : { x, y }; }
+
+// 화면 좌표 → PC 화면 비율 좌표 (0~1). 확대 상태와 레터박스 반영 (cx, cy는 toLocal 좌표)
 function norm(cx, cy) {
-  const r = video.getBoundingClientRect();
+  const r = { left: view.tx, top: view.ty, width: stage.clientWidth * view.s, height: stage.clientHeight * view.s };
   const vw = video.videoWidth, vh = video.videoHeight; if (!vw || !vh) return null;
   const s = Math.min(r.width / vw, r.height / vh), dw = vw * s, dh = vh * s;
   const x = (cx - (r.left + (r.width - dw) / 2)) / dw, y = (cy - (r.top + (r.height - dh) / 2)) / dh;
@@ -360,7 +394,7 @@ function ripple(x, y, color) {
 // 탭=클릭 · 꾹 눌렀다 떼기=우클릭 · 꾹 누른 채 끌기=드래그 · 한 손가락 이동=마우스 이동(확대 중엔 화면 이동)
 // 두 손가락 위아래=스크롤 · 벌리기/오므리기=확대 · 두 손가락 탭=우클릭
 const T = { mode: null, start: null, last: null, hold: null, pressed: false, two: null, lastTap: null };
-const pt = (t) => ({ x: t.clientX, y: t.clientY });
+const pt = (t) => toLocal(t.clientX, t.clientY);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 function click(p, button) {
   const n = norm(p.x, p.y); if (!n || !n.inside) return;
