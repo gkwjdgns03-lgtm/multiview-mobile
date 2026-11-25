@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 버전 / 업데이트 ----------
 // 홈 화면에 설치한 앱에는 새로고침 버튼이 없으므로, 새 버전이 올라오면 앱 안에서 알려주고 바로 업데이트
-const APP_VERSION = '2026.11.25-4';
+const APP_VERSION = '2026.11.25-5';
 async function checkUpdate(manual) {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -89,7 +89,7 @@ function mungeOpus(sdp) {
   return sdp.replace(new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`), (_l, p) => `a=fmtp:${pt} ${[...p.split(';').filter((kv) => kv && !/^(stereo|sprop-stereo|maxaveragebitrate|minptime)=/.test(kv)), 'stereo=1', 'sprop-stereo=1', 'maxaveragebitrate=160000', 'minptime=10'].join(';')}`);
 }
 function turnServers() {
-  const list = String(settings.turnUrl || '').split(/[\s,]+/).filter((u) => /^turns?:/i.test(u));
+  const list = String(settings.turnUrl || '').split(/[\s,]+/).map((u) => u.trim()).filter(Boolean).map((u) => (/^turns?:/i.test(u) ? u : 'turn:' + u.replace(/^[a-z]+:\/\//i, ''))); // 'turn:' 없이 입력해도 붙여 줌
   if (!list.length) return [];
   const urls = [];
   for (const u of list) { if (/[?&]transport=/i.test(u) || /^turns:/i.test(u)) urls.push(u); else urls.push(u, u + (u.includes('?') ? '&' : '?') + 'transport=tcp'); }
