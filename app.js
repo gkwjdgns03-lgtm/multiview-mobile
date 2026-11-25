@@ -3,6 +3,27 @@
 // 연결 방식은 PC 앱과 같음: ntfy.sh(암호화된 연결 요청) + HiveMQ(켜짐/꺼짐) + WebRTC(화면·소리·입력 직접 연결)
 const $ = (id) => document.getElementById(id);
 
+// ---------- 버전 / 업데이트 ----------
+// 홈 화면에 설치한 앱에는 새로고침 버튼이 없으므로, 새 버전이 올라오면 앱 안에서 알려주고 바로 업데이트
+const APP_VERSION = '2026.11.25-3';
+async function checkUpdate(manual) {
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION) { showUpdate(v); return true; }
+    if (manual) toast('최신 버전이에요 (' + APP_VERSION + ')');
+  } catch { if (manual) toast('업데이트를 확인하지 못했어요. 인터넷 연결을 확인하세요.'); }
+  return false;
+}
+// 주소에 버전을 붙여 다시 열면 휴대폰에 저장된 예전 파일 대신 새 파일을 받아옴
+function applyUpdate(v) { location.replace(location.pathname + '?v=' + encodeURIComponent(v || Date.now())); }
+function showUpdate(v) {
+  const b = document.getElementById('updateBar'); if (!b) return;
+  b.querySelector('span').textContent = '새 버전이 있어요 (' + v + ')';
+  b.querySelector('button').onclick = () => applyUpdate(v);
+  b.classList.remove('hidden');
+}
+
 // ---------- 공통 ----------
 const RELAY = 'https://ntfy.sh';
 const PRESENCE_URL = 'wss://broker.hivemq.com:8884/mqtt';
@@ -521,3 +542,9 @@ if (window.visualViewport) {
 document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseMods(); if (T.pressed) { sendCtl({ t: 'u', b: 0 }); T.pressed = false; } } });
 
 renderList();
+document.getElementById('appVersion').textContent = APP_VERSION;
+document.getElementById('updateCheck').onclick = async () => { if (!(await checkUpdate(true))) {} };
+document.getElementById('hardReload').onclick = () => applyUpdate();
+checkUpdate(false);
+// 다시 앱으로 돌아왔을 때(원격 화면이 아닐 때만) 확인
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !pc) checkUpdate(false); });
